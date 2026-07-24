@@ -3,110 +3,186 @@ auth/authentication.py
 
 Authentication module for the LifeLink Blood Donation Management System.
 
-Day 1 scope: function stubs and docstrings only. Full implementation
-(password hashing with bcrypt, session handling, etc.) begins Day 2.
+Day 2: real implementation of admin registration, login, logout,
+password hashing/verification, and simple in-memory session management.
+
+Expected admins table (MySQL):
+    CREATE TABLE admins (
+        admin_id      INT AUTO_INCREMENT PRIMARY KEY,
+        full_name     VARCHAR(100) NOT NULL,
+        email         VARCHAR(100) UNIQUE,
+        phone         VARCHAR(20) UNIQUE,
+        password_hash VARCHAR(255) NOT NULL
+    );
+
+If Member 4's shared database.connection module isn't ready yet, this
+file falls back to its own local get_connection() so it still runs —
+swap DB_CONFIG below for the team's real shared connection once available.
 """
 
+import time
+import uuid
 import bcrypt
+import mysql.connector
+from mysql.connector import Error
 
+# --- Database connection -----------------------------------------------
+# TODO (integration): replace this with the team's shared
+# database.connection.get_connection() once Member 4's module is ready.
+import os
+
+DB_CONFIG = {
+    "host": os.environ.get("DB_HOST", "mysql-6159335-alustudent-6978.k.aivencloud.com"),
+    "port": int(os.environ.get("DB_PORT", 21312)),
+    "user": os.environ.get("DB_USER", "avnadmin"),
+    "password": os.environ.get("DB_PASSWORD"),
+    "database": os.environ.get("DB_NAME", "defaultdb"),
+}
+
+
+def get_connection():
+    """Open and return a new MySQL connection using DB_CONFIG."""
+    return mysql.connector.connect(**DB_CONFIG)
+
+
+# --- Session management (simple in-memory store) ------------------------
+# session_id -> {"identifier": str, "expires_at": float}
+_SESSIONS = {}
+SESSION_TIMEOUT_SECONDS = 20 * 60  # 20 minutes, within the 15-30 min spec
+
+
+def _create_session(identifier):
+    """Create a new session for a logged-in user and return its id."""
+    session_id = str(uuid.uuid4())
+    _SESSIONS[session_id] = {
+        "identifier": identifier,
+        "expires_at": time.time() + SESSION_TIMEOUT_SECONDS,
+    }
+    return session_id
+
+
+def _touch_session(session_id):
+    """Refresh a session's expiry (call this on each authenticated action)."""
+    if session_id in _SESSIONS:
+        _SESSIONS[session_id]["expires_at"] = time.time() + SESSION_TIMEOUT_SECONDS
+
+
+def is_session_valid(session_id):
+    """Return True if the session exists and hasn't expired."""
+    session = _SESSIONS.get(session_id)
+    if session is None:
+        return False
+    if time.time() > session["expires_at"]:
+        del _SESSIONS[session_id]
+        return False
+    return True
+
+
+# --- Password hashing -----------------------------------------------------
+
+def hash_password(plain_password):
+    """Hash a plaintext password with bcrypt and return it as a string."""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(plain_password.encode("utf-8"), salt)
+    return hashed.decode("utf-8")
+
+
+def verify_password(plain_password, hashed_password):
+    """Return True if plain_password matches the stored bcrypt hash."""
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+    )
+
+
+# --- Input validation -----------------------------------------------------
+
+def _validate_login_input(identifier, password):
+    """Return an error message string, or None if input is valid."""
+    if not identifier or not identifier.strip():
+        return "Email or phone number is required."
+    if not password:
+        return "Password is required."
+    return None
+
+
+# --- Core authentication functions ----------------------------------------
 
 def register_admin(full_name, email, phone, password):
     """
-    Register a new admin/staff account.
-
-    Args:
-        full_name (str): Full name of the admin.
-        email (str): Admin's email address, used for login.
-        phone (str): Admin's phone number, used for login.
-        password (str): Plaintext password to be hashed and stored.
+    Register a new admin account with a securely hashed password.
 
     Returns:
-        dict: The newly created admin record (without the plaintext
-            password), or an error message if registration fails
-            (e.g. missing fields or duplicate email/phone).
-
-    Day 2 TODO:
-        - Validate required fields are present.
-        - Check for duplicate email/phone in the database.
-        - Hash the password using hash_password() before storing.
-        - Insert the new admin record into the database.
+        dict: {"success": True, "admin_id": <id>} on success, or
+              {"success": False, "error": <message>} on failure.
     """
-    pass
+    if not full_name or not email or not phone or not password:
+        return {"success": False, "error": "All fields are required."}
+
+    password_hash = hash_password(password)
+
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            "INSERT INTO admins (full_name, email, phone, password_hash) "
+            "VALUES (%s, %s, %s, %s)",
+            (full_name, email, phone, password_hash),
+        )
+        connection.commit()
+        new_id = cursor.lastrowid
+        cursor.close()
+        connection.close()
+        return {"success": True, "admin_id": new_id}
+    except Error as e:
+        # Covers duplicate email/phone (unique constraint) and other DB errors
+        return {"success": False, "error": str(e)}
 
 
 def login(identifier, password):
     """
-    Authenticate a user (admin or donor) using their email or phone
-    number plus password, and start a session on success.
-
-    Args:
-        identifier (str): The user's email address or phone number.
-        password (str): The plaintext password supplied at login.
+    Authenticate an admin by email or phone plus password, and start
+    a session on success.
 
     Returns:
-        dict: Session/user info on successful authentication, or
-            an error message on failure (invalid credentials).
-
-    Day 2 TODO:
-        - Look up the user record by email or phone.
-        - Verify the password using verify_password().
-        - Create a session with an expiry for auto-logout after
-          15-30 minutes of inactivity (per the non-functional
-          security requirement).
+        dict: {"success": True, "session_id": <id>, "admin_id": <id>}
+              on success, or {"success": False, "error": <message>}.
     """
-    pass
+    validation_error = _validate_login_input(identifier, password)
+    if validation_error:
+        return {"success": False, "error": validation_error}
+
+    try:
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT admin_id, password_hash FROM admins "
+            "WHERE email = %s OR phone = %s",
+            (identifier, identifier),
+        )
+        admin = cursor.fetchone()
+        cursor.close()
+        connection.close()
+    except Error as e:
+        return {"success": False, "error": str(e)}
+
+    if admin is None:
+        return {"success": False, "error": "Invalid credentials."}
+
+    if not verify_password(password, admin["password_hash"]):
+        return {"success": False, "error": "Invalid credentials."}
+
+    session_id = _create_session(identifier)
+    return {"success": True, "session_id": session_id, "admin_id": admin["admin_id"]}
 
 
 def logout(session_id):
     """
-    End an active user session.
-
-    Args:
-        session_id (str): Identifier of the session to terminate.
+    End an active session.
 
     Returns:
-        bool: True if the session was successfully ended, False
-            if no matching session was found.
-
-    Day 2 TODO:
-        - Invalidate/remove the session from session storage.
-        - Handle the case where the session has already expired.
+        bool: True if a session was found and ended, False otherwise.
     """
-    pass
-
-
-def hash_password(plain_password):
-    """
-    Hash a plaintext password using bcrypt so it is never stored
-    in plain text, per the system's security requirements.
-
-    Args:
-        plain_password (str): The plaintext password to hash.
-
-    Returns:
-        str: The bcrypt password hash.
-
-    Day 2 TODO:
-        - Implement using bcrypt.hashpw() with a generated salt.
-    """
-    pass
-
-
-def verify_password(plain_password, hashed_password):
-    """
-    Verify a plaintext password against a previously stored bcrypt hash.
-
-    Args:
-        plain_password (str): The plaintext password supplied at login.
-        hashed_password (str): The bcrypt hash stored for this user.
-
-    Returns:
-        bool: True if the password matches the hash, False otherwise.
-
-    Day 2 TODO:
-        - Implement using bcrypt.checkpw().
-    """
-    pass
-
-
-if
+    if session_id in _SESSIONS:
+        del _SESSIONS[session_id]
+        return True
+    return False
