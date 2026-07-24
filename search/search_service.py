@@ -25,32 +25,28 @@ def search_by_blood_type(blood_type):
         return []
 
     blood_type = blood_type.strip().upper()
-    
     connection = None
     cursor = None
 
     try:
 
         connection = get_connection()
-
         cursor = connection.cursor(dictionary=True)
 
         query = """
-            SELECT 
+            SELECT
                 donor_id,
                 first_name,
                 last_name,
                 blood_type,
                 district,
-                phone                
+                phone
             FROM donors
             WHERE blood_type = %s
         """
 
         cursor.execute(query, (blood_type,))
         donors = cursor.fetchall()
-
-
         return donors
 
     except mysql.connector.Error as error:
@@ -73,25 +69,22 @@ def search_by_district(district):
 
     Returns:
         list: Matching donor records.
-
     """
 
     if not district:
         return []
 
     district = district.strip().title()
-    
     connection = None
     cursor = None
 
     try:
 
         connection = get_connection()
-
         cursor = connection.cursor(dictionary=True)
 
         query = """
-            SELECT 
+            SELECT
                 donor_id,
                 first_name,
                 last_name,
@@ -104,8 +97,6 @@ def search_by_district(district):
 
         cursor.execute(query, (district,))
         donors = cursor.fetchall()
-
-
         return donors
 
     except mysql.connector.Error as error:
@@ -117,8 +108,6 @@ def search_by_district(district):
 
         if connection:
             connection.close()
-
-    
 
 
 def search_by_blood_type_and_district(blood_type, district):
@@ -147,10 +136,8 @@ def search_by_blood_type_and_district(blood_type, district):
 
         connection = get_connection()
         cursor = connection.cursor(dictionary=True)
-
-
         query = """
-            SELECT 
+            SELECT
                 donor_id,
                 first_name,
                 last_name,
@@ -165,10 +152,7 @@ def search_by_blood_type_and_district(blood_type, district):
         cursor.execute(query, (blood_type, district))
         donors = cursor.fetchall()
 
-    
         return donors
-
-
     except mysql.connector.Error as error:
         print(f"Database Error: {error}")
         return []
@@ -178,4 +162,3 @@ def search_by_blood_type_and_district(blood_type, district):
 
         if connection:
             connection.close()
-
