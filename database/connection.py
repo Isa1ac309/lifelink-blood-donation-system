@@ -12,3 +12,8 @@ def get_db_connection():
         password=os.getenv("DB_PASSWORD"),
         database=os.getenv("DB_NAME")
     )
+
+# you are free to play along it
+# use .env to use your own variables
+#.env must be in the root of the repo
+# .env must be included in .gitignore
