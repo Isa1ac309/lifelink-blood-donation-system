@@ -1,150 +1,309 @@
-"""Donor management workflow for the LifeLink Blood Donation Management System.
-
-Owned by Member 3. Implements:
-    - Donor Registration
-    - View Profile
-    - Update Profile
-    - Change Availability
-    - Donor Information Validation
-
-NOTE (Day 1 skeleton): Database access is owned by Member 4. Once
-database/connection.py exposes a connection helper, replace the `# TODO`
-markers below with real calls (parameterized queries only, never
-string-format SQL, never store passwords in plain text).
+"""
+Donor Management Service
+LifeLink Blood Donation Management System
 """
 
 from datetime import date
-from typing import Optional
+import re
+import mysql.connector
 
-from donors.donor import Donor
-
-VALID_BLOOD_TYPES = {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}
+from database.connection import get_db_connection
 
 
-def register_donor(
-    full_name: str,
-    blood_type: str,
-    district: str,
-    phone_number: str,
-    date_of_birth: date,
-) -> Donor:
-    """Registers a new donor after validating input.
+VALID_BLOOD_TYPES = {
+    "A+", "A-",
+    "B+", "B-",
+    "AB+", "AB-",
+    "O+", "O-"
+}
 
-    Args:
-        full_name: Donor's full name.
-        blood_type: Donor's blood group (e.g. "O+").
-        district: District where the donor is located.
-        phone_number: Donor's contact number.
-        date_of_birth: Donor's date of birth.
 
-    Returns:
-        The newly created Donor object (with donor_id populated once the
-        database layer is wired in).
+# ===========================================
+# Helper Functions
+# ===========================================
 
-    Raises:
-        ValueError: If any of the supplied donor information is invalid.
-    """
-    is_valid, error_message = validate_donor_info(
-        full_name, blood_type, district, phone_number, date_of_birth
-    )
-    if not is_valid:
-        raise ValueError(error_message)
+def calculate_age(date_of_birth):
+    """Calculate donor age from date of birth."""
 
-    donor = Donor(
-        donor_id=None,
-        full_name=full_name,
-        blood_type=blood_type,
-        district=district,
-        phone_number=phone_number,
-        date_of_birth=date_of_birth,
+    today = date.today()
+
+    return (
+        today.year
+        - date_of_birth.year
+        - (
+            (today.month, today.day)
+            <
+            (date_of_birth.month, date_of_birth.day)
+        )
     )
 
-    # TODO: persist `donor` via database.connection (Member 4) and set
-    # donor.donor_id from the inserted row's id.
 
-    return donor
+def validate_donor_info(data):
+
+    if len(data["full_name"].strip()) < 2:
+        return False, "Invalid full name."
+
+    age = calculate_age(data["date_of_birth"])
+
+    if age < 18:
+        return False, "Donor must be at least 18 years old."
+
+    if age > 65:
+        return False, "Maximum donor age is 65."
+
+    if data["blood_type"] not in VALID_BLOOD_TYPES:
+        return False, "Invalid blood type."
+
+    phone_pattern = r"^\+?[0-9]{10,15}$"
+
+    if not re.match(phone_pattern, data["phone"]):
+        return False, "Invalid phone number."
+
+    email_pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+
+    if not re.match(email_pattern, data["email"]):
+        return False, "Invalid email."
+
+    return True, ""
 
 
-def view_profile(donor_id: int) -> Optional[Donor]:
-    """Retrieves a donor's profile by id.
+# ===========================================
+# Register Donor
+# ===========================================
 
-    Args:
-        donor_id: The id of the donor to look up.
+def register_donor(data):
 
-    Returns:
-        The matching Donor object, or None if no donor was found.
+    valid, message = validate_donor_info(data)
+
+    if not valid:
+        return {
+            "success": False,
+            "message": message
+        }
+
+    connection = get_db_connection()
+
+    if not connection:
+        return {
+            "success": False,
+            "message": "Database connection failed."
+        }
+
+    cursor = connection.cursor()
+
+    query = """
+    INSERT INTO donors
+    (
+        full_name,
+        date_of_birth,
+        blood_type,
+        phone,
+        email,
+        district,
+        is_available
+    )
+
+    VALUES
+    (
+        %s,%s,%s,%s,%s,%s,%s
+    )
     """
-    # TODO: fetch the donor row via database.connection and map it to a
-    # Donor object.
-    raise NotImplementedError("Pending integration with the database module.")
+
+    cursor.execute(
+
+        query,
+
+        (
+
+            data["full_name"],
+
+            data["date_of_birth"],
+
+            data["blood_type"],
+
+            data["phone"],
+
+            data["email"],
+
+            data["district"],
+
+            data.get("is_available", True)
+
+        )
+
+    )
+
+    connection.commit()
+
+    donor_id = cursor.lastrowid
+
+    cursor.close()
+
+    connection.close()
+
+    return {
+
+        "success": True,
+
+        "message": "Donor registered successfully.",
+
+        "donor_id": donor_id
+
+    }
 
 
-def update_profile(donor_id: int, updated_fields: dict) -> Donor:
-    """Updates one or more fields on an existing donor's profile.
+# ===========================================
+# Get One Donor
+# ===========================================
 
-    Args:
-        donor_id: The id of the donor to update.
-        updated_fields: Mapping of field names to their new values (only
-            fields present in the Donor model are applied).
+def get_donor_by_id(donor_id):
 
-    Returns:
-        The updated Donor object.
+    connection = get_db_connection()
 
-    Raises:
-        ValueError: If `updated_fields` contains invalid donor information.
+    cursor = connection.cursor(dictionary=True)
+
+    cursor.execute(
+
+        """
+        SELECT *
+        FROM donors
+        WHERE donor_id=%s
+        """,
+
+        (donor_id,)
+
+    )
+
+    donor = cursor.fetchone()
+
+    cursor.close()
+
+    connection.close()
+
+    if donor:
+
+        return {
+
+            "success": True,
+
+            "data": donor
+
+        }
+
+    return {
+
+        "success": False,
+
+        "message": "Donor not found."
+
+    }
+
+
+# ===========================================
+# Get All Donors
+# ===========================================
+
+def get_all_donors():
+
+    connection = get_db_connection()
+
+    cursor = connection.cursor(dictionary=True)
+
+    cursor.execute("""
+
+        SELECT *
+
+        FROM donors
+
+        ORDER BY full_name
+
+    """)
+
+    donors = cursor.fetchall()
+
+    cursor.close()
+
+    connection.close()
+
+    return {
+
+        "success": True,
+
+        "data": donors
+
+    }
+
+
+# ===========================================
+# Update Donor
+# ===========================================
+
+def update_donor(donor_id, data):
+
+    connection = get_db_connection()
+
+    cursor = connection.cursor()
+
+    query = """
+
+    UPDATE donors
+
+    SET
+
+        full_name=%s,
+
+        date_of_birth=%s,
+
+        blood_type=%s,
+
+        phone=%s,
+
+        email=%s,
+
+        district=%s,
+
+        is_available=%s
+
+    WHERE donor_id=%s
+
     """
-    # TODO: fetch the existing donor, apply and validate updated_fields,
-    # then persist via database.connection.
-    raise NotImplementedError("Pending integration with the database module.")
 
+    cursor.execute(
 
-def change_availability(donor_id: int, is_available: bool) -> Donor:
-    """Updates a donor's availability status.
+        query,
 
-    Args:
-        donor_id: The id of the donor to update.
-        is_available: The new availability status.
+        (
 
-    Returns:
-        The updated Donor object.
-    """
-    # TODO: persist the availability change via database.connection.
-    raise NotImplementedError("Pending integration with the database module.")
+            data["full_name"],
 
+            data["date_of_birth"],
 
-def validate_donor_info(
-    full_name: str,
-    blood_type: str,
-    district: str,
-    phone_number: str,
-    date_of_birth: date,
-) -> tuple[bool, Optional[str]]:
-    """Validates donor information before registration or an update.
+            data["blood_type"],
 
-    Args:
-        full_name: Donor's full name.
-        blood_type: Donor's blood group.
-        district: District where the donor is located.
-        phone_number: Donor's contact number.
-        date_of_birth: Donor's date of birth.
+            data["phone"],
 
-    Returns:
-        A tuple of (is_valid, error_message). error_message is None when
-        is_valid is True.
-    """
-    if not full_name or not full_name.strip():
-        return False, "Full name is required."
+            data["email"],
 
-    if blood_type not in VALID_BLOOD_TYPES:
-        return False, f"Blood type must be one of {sorted(VALID_BLOOD_TYPES)}."
+            data["district"],
 
-    if not district or not district.strip():
-        return False, "District is required."
+            data["is_available"],
 
-    if not phone_number or not phone_number.strip():
-        return False, "Phone number is required."
+            donor_id
 
-    if date_of_birth >= date.today():
-        return False, "Date of birth must be in the past."
+        )
 
-    return True, None
+    )
+
+    connection.commit()
+
+    cursor.close()
+
+    connection.close()
+
+    return {
+
+        "success": True,
+
+        "message": "Donor updated successfully."
+
+    }
