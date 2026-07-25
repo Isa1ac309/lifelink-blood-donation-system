@@ -7,7 +7,7 @@ using different criteria.
 
 import mysql.connector
 
-from database.connection import get_connection
+from database.connection import get_db_connection
 
 
 def search_by_blood_type(blood_type):
@@ -30,7 +30,7 @@ def search_by_blood_type(blood_type):
 
     try:
 
-        connection = get_connection()
+        connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
 
         query = """
@@ -80,7 +80,7 @@ def search_by_district(district):
 
     try:
 
-        connection = get_connection()
+        connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
 
         query = """
@@ -134,7 +134,7 @@ def search_by_blood_type_and_district(blood_type, district):
 
     try:
 
-        connection = get_connection()
+        connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
         query = """
             SELECT
