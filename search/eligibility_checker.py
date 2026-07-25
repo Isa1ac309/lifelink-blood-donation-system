@@ -70,21 +70,4 @@ def days_until_eligible(last_donation_date):
     remaining_days = ELIGIBILITY_DAYS - days_passed
     return max(0, remaining_days)
 
-if __name__ == "__main__":
-    print("Eligible:", is_eligible("01/01/2026"))
 
-    print("Days remaining:", days_until_eligible("20/07/2026"))
-
-    print("Eligible:", is_eligible("20/07/2026"))
-
-    # Invalid date format
-    print(days_until_eligible("2026-07-20"))
-
-    # Future date
-    print(days_until_eligible("25/12/2026"))
-
-    # Invalid calendar date
-    print(days_until_eligible("31/02/2026"))
-
-    # None input
-    print(days_until_eligible(None))
