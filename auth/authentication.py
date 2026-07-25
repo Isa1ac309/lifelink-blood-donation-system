@@ -3,9 +3,6 @@ auth/authentication.py
 
 Authentication module for the LifeLink Blood Donation Management System.
 
-Day 2: real implementation of admin registration, login, logout,
-password hashing/verification, and simple in-memory session management.
-
 Expected admins table (MySQL):
     CREATE TABLE admins (
         admin_id      INT AUTO_INCREMENT PRIMARY KEY,
@@ -15,20 +12,12 @@ Expected admins table (MySQL):
         password_hash VARCHAR(255) NOT NULL
     );
 
-If Member 4's shared database.connection module isn't ready yet, this
-file falls back to its own local get_connection() so it still runs —
-swap DB_CONFIG below for the team's real shared connection once available.
-"""
-
 import time
 import uuid
 import bcrypt
 import mysql.connector
 from mysql.connector import Error
 
-# --- Database connection -----------------------------------------------
-# TODO (integration): replace this with the team's shared
-# database.connection.get_connection() once Member 4's module is ready.
 import os
 
 DB_CONFIG = {
@@ -104,9 +93,6 @@ def _validate_login_input(identifier, password):
         return "Password is required."
     return None
 
-
-# --- Core authentication functions ----------------------------------------
-
 def register_admin(full_name, email, phone, password):
     """
     Register a new admin account with a securely hashed password.
@@ -134,14 +120,10 @@ def register_admin(full_name, email, phone, password):
         connection.close()
         return {"success": True, "admin_id": new_id}
     except Error as e:
-        # Covers duplicate email/phone (unique constraint) and other DB errors
         return {"success": False, "error": str(e)}
 
 
 def login(identifier, password):
-    """
-    Authenticate an admin by email or phone plus password, and start
-    a session on success.
 
     Returns:
         dict: {"success": True, "session_id": <id>, "admin_id": <id>}
