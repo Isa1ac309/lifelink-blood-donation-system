@@ -2,7 +2,7 @@
 -- LifeLink Blood Donation Management System
 -- Database schema (MySQL / MariaDB, InnoDB)
 --
--- Owner: Member 4 (Database & Donations)
+-- Owner: Gatete Irene (Database & Donations)
 --
 -- Conventions used (see Development Guide, sections 5 & 6):
 --   * Each table's primary key is named <entity>_id (donor_id,
