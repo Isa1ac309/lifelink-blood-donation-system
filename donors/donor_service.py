@@ -5,7 +5,6 @@ LifeLink Blood Donation Management System
 
 from datetime import date
 import re
-import mysql.connector
 
 from database.connection import get_db_connection
 
@@ -50,6 +49,8 @@ def validate_donor_info(data):
 
     if age > 65:
         return False, "Maximum donor age is 65."
+
+    data["blood_type"] = data["blood_type"].strip().upper()
 
     if data["blood_type"] not in VALID_BLOOD_TYPES:
         return False, "Invalid blood type."
@@ -157,9 +158,12 @@ def register_donor(data):
 # ===========================================
 
 def get_donor_by_id(donor_id):
-
+    """get donor by ID"""
     connection = get_db_connection()
 
+    if not connection:
+        return {"success": False,
+                "message": "Database connection failed!"}
     cursor = connection.cursor(dictionary=True)
 
     cursor.execute(
@@ -207,6 +211,10 @@ def get_all_donors():
 
     connection = get_db_connection()
 
+    if not connection:
+            return {"success": False,
+                    "message": "Database connection failed!"}
+
     cursor = connection.cursor(dictionary=True)
 
     cursor.execute("""
@@ -240,7 +248,19 @@ def get_all_donors():
 
 def update_donor(donor_id, data):
 
+    """Update an existing donor"""
+
+    valid, message = validate_donor_info(data)
+
+    if not valid:
+        return {"success": False,
+                "message": message}
+
     connection = get_db_connection()
+
+    if not connection:
+        return {"success": False,
+                "message": "Database connection failed"}
 
     cursor = connection.cursor()
 
@@ -294,6 +314,13 @@ def update_donor(donor_id, data):
 
     )
 
+    if cursor.rowcount == 0:
+        cursor.close()
+        connection.close()
+
+        return {"success": False,
+                "message": "Donor is not found."}
+
     connection.commit()
 
     cursor.close()
@@ -306,4 +333,50 @@ def update_donor(donor_id, data):
 
         "message": "Donor updated successfully."
 
+    }
+
+# I added this function to make it easy to search up people with their names
+
+def get_donor_by_name(full_name):
+    """Find donor ID using the donor's full name."""
+    connection = get_db_connection()
+
+    if not connection:
+        return {
+            "success": False,
+            "message": "Database connection failed."
+        }
+
+    cursor = connection.cursor(dictionary=True)
+
+    cursor.execute(
+        """
+        SELECT donor_id, full_name, blood_type, district
+        FROM donors
+        WHERE LOWER(full_name) = LOWER(%s)
+        """,
+        (full_name.strip(),)
+    )
+
+    donors = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    if not donors:
+        return {
+            "success": False,
+            "message": "Donor not found."
+        }
+
+    if len(donors) > 1:
+        return {
+            "success": False,
+            "message": "Multiple donors have this name.",
+            "data": donors
+        }
+
+    return {
+        "success": True,
+        "data": donors[0]
     }
