@@ -1,6 +1,6 @@
 """Database initialization script for the LifeLink Blood Donation System.
 
-Owned by Member 4 (Database & Donations). Covers the guide's
+Owned by Gatete Irene (Database & Donations). Covers the guide's
 "database initialization scripts" responsibility.
 
 Usage (from the repo root):
@@ -38,7 +38,7 @@ def seed_reference_locations() -> int:
     """
     insert_query = """
         INSERT INTO donation_locations (name, district, address)
-        SELECT %s, %s, %s
+        SELECT %s, %s, 
         WHERE NOT EXISTS (
             SELECT 1 FROM donation_locations WHERE name = %s
         )
