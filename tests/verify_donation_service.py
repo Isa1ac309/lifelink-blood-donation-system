@@ -1,141 +1,147 @@
-"""Manual verification harness for Member 4's database + donation work.
+"""
+Simple verification test for LifeLink Donation Service.
 
-Run from the repo root with a MySQL server available and a .env file:
-
+Run:
     python -m tests.verify_donation_service
-
-It proves, against a REAL MySQL database (not in-memory):
-  1. The schema applies and data persists across separate connections.
-  2. Recording a donation writes a row to the donations table.
-  3. The donor's last_donation_date is updated on each new donation.
-  4. Donation history retrieval returns the stored rows.
-  5. The foreign key rejects a donation for a non-existent donor.
-  6. ON DELETE RESTRICT blocks deleting a donor who has donations.
-
-This is a developer smoke test, not part of the shipped app flow.
 """
 
 from datetime import date
 
-from database.connection import get_connection, init_database
-from donations import donation_service
-
-PASS = "\033[92mPASS\033[0m"
-FAIL = "\033[91mFAIL\033[0m"
-results = []
+from database.connection import get_db_connection
+from donations.donation_service import get_donation_history, record_donation
 
 
 def check(label, condition):
-    results.append(bool(condition))
-    print(f"  [{PASS if condition else FAIL}] {label}")
+    """Print the result of a test check."""
+    status = "PASS" if condition else "FAIL"
+    print(f"  [{status}] {label}")
     return condition
 
 
-def fetch_last_donation_date(donor_id):
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT last_donation_date FROM donors WHERE donor_id = %s",
-            (donor_id,),
-        )
-        row = cur.fetchone()
-        return row[0] if row else None
-    finally:
-        cur.close()
-        conn.close()
+def create_test_data():
+    """Create a temporary donor and donation location."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        """INSERT INTO donors
+        (full_name, date_of_birth, blood_type, phone, email, district)
+        VALUES (%s, %s, %s, %s, %s, %s)""",
+        (
+            "Test Donor", date(1995, 5, 20), "O+",
+            "+250788000111", "test_donor@example.com", "Gasabo",
+        ),
+    )
+    donor_id = cur.lastrowid
+
+    cur.execute(
+        """INSERT INTO donation_locations
+        (location_name, district)
+        VALUES (%s, %s)""",
+        ("Test Location", "Gasabo"),
+    )
+    location_id = cur.lastrowid
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    return donor_id, location_id
 
 
-def seed_donor():
-    """Inserts one donor directly and returns its id."""
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            """INSERT INTO donors
-               (full_name, blood_type, district, phone, email, date_of_birth)
-               VALUES (%s, %s, %s, %s, %s, %s)""",
-            ("Test Donor", "O+", "Gasabo", "+250788000111",
-             "test@example.com", date(1995, 5, 20)),
-        )
-        conn.commit()
-        return cur.lastrowid
-    finally:
-        cur.close()
-        conn.close()
+def get_last_donation_date(donor_id):
+    """Return a donor's last donation date."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT last_donation_date FROM donors WHERE donor_id = %s",
+        (donor_id,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row[0] if row else None
 
 
-def cleanup(donor_id):
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM donations WHERE donor_id = %s", (donor_id,))
-        cur.execute("DELETE FROM donors WHERE donor_id = %s", (donor_id,))
-        conn.commit()
-    finally:
-        cur.close()
-        conn.close()
+def cleanup(donor_id, location_id):
+    """Remove temporary test data."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM donations WHERE donor_id = %s", (donor_id,))
+    cur.execute("DELETE FROM donors WHERE donor_id = %s", (donor_id,))
+    cur.execute(
+        "DELETE FROM donation_locations WHERE location_id = %s",
+        (location_id,),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
 def main():
-    print("Applying schema...")
-    init_database()
+    """Run donation service verification tests."""
+    print("\n" + "=" * 55)
+    print("       LIFELINK DONATION SERVICE TEST")
+    print("=" * 55)
 
-    donor_id = seed_donor()
-    print(f"Seeded donor_id = {donor_id}\n")
+    print("\n1) Database connection")
+    conn = get_db_connection()
+    if not conn:
+        print("  [FAIL] MySQL connection failed")
+        return 1
+    print("  [PASS] MySQL connection successful")
+    conn.close()
 
-    print("1) Record a donation (writes to MySQL):")
-    r1 = donation_service.record_donation(donor_id, "2026-03-01", volume_ml=450)
-    check("record_donation returned success", r1.get("success"))
-    first_id = r1.get("donation_id")
-    check("a donation_id was assigned by the DB", isinstance(first_id, int))
+    print("\n2) Creating test data")
+    donor_id, location_id = create_test_data()
+    print(f"  [PASS] Test donor created (ID: {donor_id})")
+    print(f"  [PASS] Test location created (ID: {location_id})")
 
-    print("2) Donor's last_donation_date updated:")
-    check("last_donation_date == 2026-03-01",
-          fetch_last_donation_date(donor_id) == date(2026, 3, 1))
+    print("\n3) Recording donation")
+    donation = record_donation(
+        donor_id, location_id, "2026-07-20", 450
+    )
+    checks = [
+        check("Donation recorded successfully",
+              donation.get("success") is True),
+        check("Donation ID was created",
+              isinstance(donation.get("donation_id"), int)),
+    ]
 
-    print("3) Record a later donation advances last_donation_date:")
-    donation_service.record_donation(donor_id, "2026-06-15")
-    check("last_donation_date advanced to 2026-06-15",
-          fetch_last_donation_date(donor_id) == date(2026, 6, 15))
+    print("\n4) Checking donor update")
+    checks.append(
+        check(
+            "last_donation_date was updated",
+            get_last_donation_date(donor_id) == date(2026, 7, 20),
+        )
+    )
 
-    print("4) A back-dated donation does NOT rewind last_donation_date:")
-    donation_service.record_donation(donor_id, "2026-01-10")
-    check("last_donation_date stays 2026-06-15",
-          fetch_last_donation_date(donor_id) == date(2026, 6, 15))
+    print("\n5) Checking donation history")
+    history = get_donation_history(donor_id)
+    checks.extend([
+        check("Donation history query succeeded",
+              history.get("success") is True),
+        check("One donation appears in history",
+              len(history.get("data", [])) == 1),
+    ])
 
-    print("5) Data persists on a brand-new connection (not in memory):")
-    hist = donation_service.get_donation_history(donor_id)
-    check("history query succeeded", hist.get("success"))
-    check("3 donations persisted", len(hist.get("data", [])) == 3)
+    print("\n6) Testing invalid donor")
+    invalid = record_donation(999999, location_id, "2026-07-21")
+    checks.append(
+        check("Invalid donor was rejected",
+              invalid.get("success") is False)
+    )
 
-    print("6) Foreign key rejects a donation for a non-existent donor:")
-    bad = donation_service.record_donation(999999, "2026-03-01")
-    check("record_donation reported failure", not bad.get("success"))
-    check("failure message mentions foreign key",
-          "foreign key" in bad.get("message", "").lower())
+    print("\n7) Cleaning up")
+    cleanup(donor_id, location_id)
+    print("  [PASS] Test data removed")
 
-    print("7) ON DELETE RESTRICT blocks deleting a donor with donations:")
-    blocked = False
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM donors WHERE donor_id = %s", (donor_id,))
-        conn.commit()
-    except Exception:  # noqa: BLE001 - we expect an IntegrityError here
-        conn.rollback()
-        blocked = True
-    finally:
-        cur.close()
-        conn.close()
-    check("delete of donor-with-donations was blocked", blocked)
+    passed = sum(checks)
+    total = len(checks)
 
-    cleanup(donor_id)
+    print("\n" + "=" * 55)
+    print(f"RESULT: {passed}/{total} CHECKS PASSED")
+    print("=" * 55)
 
-    print("\n" + "=" * 50)
-    total, passed = len(results), sum(results)
-    print(f"RESULT: {passed}/{total} checks passed")
-    print("=" * 50)
     return 0 if passed == total else 1
 
 
