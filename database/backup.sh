@@ -13,7 +13,7 @@
 #
 # Requires the mysql client tools (mysqldump, mysql) on PATH.
 # =====================================================================
-set -euo pipefail
+set -euo pipefail 
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
