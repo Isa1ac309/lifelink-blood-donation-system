@@ -212,8 +212,8 @@ def get_all_donors():
     connection = get_db_connection()
 
     if not connection:
-            return {"success": False,
-                    "message": "Database connection failed!"}
+        return {"success": False,
+                "message": "Database connection failed!"}
 
     cursor = connection.cursor(dictionary=True)
 
