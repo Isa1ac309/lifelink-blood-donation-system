@@ -7,11 +7,16 @@ from datetime import datetime
 
 from auth.authentication import login, register_admin
 
-from donors.donor_service import register_donor ,get_donor_by_id, get_donor_by_name
+from donors.donor_service import register_donor, get_donor_by_id,  get_donor_by_name
 
-from donations.donation_service import record_donation,  get_donation_history
-
+from donations.donation_service import record_donation,    get_donation_history
 from reports.report_generator import generate_dashboard_report
+
+from search.search_service import (
+    search_by_blood_type,
+    search_by_district,
+    search_by_donor_id
+)
 
 
 # ============================================================
@@ -47,6 +52,14 @@ def administrator_login():
     username = input("Username: ").strip()
     password = input("Password: ")
 
+    if not username:
+        error("Username cannot be empty.")
+        return
+
+    if not password:
+        error("Password cannot be empty.")
+        return
+
     result = login(username, password)
 
     if result.get("success"):
@@ -59,7 +72,12 @@ def administrator_login():
             administrator_menu(admin)
 
     else:
-        error(result.get("message", "Login failed."))
+        error(
+            result.get(
+                "message",
+                "Login failed."
+            )
+        )
 
 
 # ============================================================
@@ -71,18 +89,45 @@ def register_new_administrator():
     header("REGISTER NEW ADMINISTRATOR")
 
     username = input("Username: ").strip()
-    password = input("Password: ")
 
-    if not username or not password:
-        error("Username and password cannot be empty.")
+    if not username:
+        error("Username cannot be empty.")
         return
 
-    result = register_admin(username, password)
+    password = input("Password: ")
+
+    if not password:
+        error("Password cannot be empty.")
+        return
+
+    confirm_password = input("Confirm password: ")
+
+    if password != confirm_password:
+        error("Passwords do not match.")
+        return
+
+    result = register_admin(
+        username,
+        password
+    )
 
     if result.get("success"):
-        success("Administrator registered successfully.")
+
+        success(
+            result.get(
+                "message",
+                "Administrator registered successfully."
+            )
+        )
+
     else:
-        error(result.get("message", "Registration failed."))
+
+        error(
+            result.get(
+                "message",
+                "Registration failed."
+            )
+        )
 
 
 # ============================================================
@@ -95,7 +140,11 @@ def administrator_menu(admin):
 
         header("ADMINISTRATOR MENU")
 
-        print(f"Logged in as: {admin.get('username')}")
+        print(
+            f"Logged in as: "
+            f"{admin.get('username')}"
+        )
+
         print()
         print("1. Register New Administrator")
         print("2. Register Donor")
@@ -121,7 +170,6 @@ def administrator_menu(admin):
         elif choice == "3":
 
             search_donor_menu()
-            pause()
 
         elif choice == "4":
 
@@ -183,10 +231,31 @@ def register_donor_menu():
         error("Invalid date. Use YYYY-MM-DD.")
         return
 
-    blood_type = input("Blood type: ").strip().upper()
+    blood_type = input(
+        "Blood type: "
+    ).strip().upper()
+
+    if not blood_type:
+        error("Blood type cannot be empty.")
+        return
+
     phone = input("Phone: ").strip()
+
+    if not phone:
+        error("Phone cannot be empty.")
+        return
+
     email = input("Email: ").strip()
+
+    if not email:
+        error("Email cannot be empty.")
+        return
+
     district = input("District: ").strip()
+
+    if not district:
+        error("District cannot be empty.")
+        return
 
     data = {
         "full_name": full_name,
@@ -210,7 +279,8 @@ def register_donor_menu():
         )
 
         print(
-            f"Donor ID: {result.get('donor_id')}"
+            f"Donor ID: "
+            f"{result.get('donor_id')}"
         )
 
     else:
@@ -224,19 +294,42 @@ def register_donor_menu():
 
 
 # ============================================================
-# Display Donor
+# Display One Donor
 # ============================================================
 
 def display_donor(donor):
 
     print("\n" + "-" * 45)
 
-    print(f"ID:            {donor.get('donor_id')}")
-    print(f"Name:          {donor.get('full_name')}")
-    print(f"Blood Type:    {donor.get('blood_type')}")
-    print(f"Phone:         {donor.get('phone')}")
-    print(f"Email:         {donor.get('email')}")
-    print(f"District:      {donor.get('district')}")
+    print(
+        f"ID:            "
+        f"{donor.get('donor_id')}"
+    )
+
+    print(
+        f"Name:          "
+        f"{donor.get('full_name')}"
+    )
+
+    print(
+        f"Blood Type:    "
+        f"{donor.get('blood_type')}"
+    )
+
+    print(
+        f"Phone:         "
+        f"{donor.get('phone')}"
+    )
+
+    print(
+        f"Email:         "
+        f"{donor.get('email')}"
+    )
+
+    print(
+        f"District:      "
+        f"{donor.get('district')}"
+    )
 
     if donor.get("is_available"):
         print("Available:     Yes")
@@ -252,56 +345,93 @@ def display_donor(donor):
 
 
 # ============================================================
-# Search Donor
+# Display Multiple Donors
+# ============================================================
+
+def display_donors(donors):
+
+    if not donors:
+
+        print("\nNo donors found.")
+        return
+
+    for donor in donors:
+
+        display_donor(donor)
+
+
+# ============================================================
+# Search Donor Menu
 # ============================================================
 
 def search_donor_menu():
 
-    header("SEARCH DONOR")
+    while True:
 
-    print("1. Search by Donor ID")
-    print("2. Search by Name")
-    print("0. Back")
+        header("SEARCH DONOR")
 
-    choice = input("\nChoose option: ").strip()
+        print("1. Search by Donor ID")
+        print("2. Search by Name")
+        print("3. Search by Blood Type")
+        print("4. Search by District")
+        print("0. Back")
 
-    if choice == "1":
+        choice = input(
+            "\nChoose option: "
+        ).strip()
 
-        search_donor_by_id()
+        if choice == "1":
 
-    elif choice == "2":
+            search_donor_by_id()
 
-        search_donor_by_name()
+        elif choice == "2":
 
-    elif choice == "0":
+            search_donor_by_name()
 
-        return
+        elif choice == "3":
 
-    else:
+            search_donor_by_blood_type()
 
-        error("Invalid option.")
+        elif choice == "4":
+
+            search_donor_by_district()
+
+        elif choice == "0":
+
+            break
+
+        else:
+
+            error("Invalid option.")
+
+        if choice != "0":
+            pause()
 
 
 # ============================================================
-# Search Donor By ID
+# Search By Donor ID
 # ============================================================
 
 def search_donor_by_id():
 
-    donor_id = input("Enter Donor ID: ").strip()
+    donor_id = input(
+        "Enter Donor ID: "
+    ).strip()
 
     if not donor_id.isdigit():
 
         error("Donor ID must be a number.")
         return
 
-    result = get_donor_by_id(
+    result = search_by_donor_id(
         int(donor_id)
     )
 
     if result.get("success"):
 
-        display_donor(result["data"])
+        display_donor(
+            result["data"]
+        )
 
     else:
 
@@ -314,12 +444,14 @@ def search_donor_by_id():
 
 
 # ============================================================
-# Search Donor By Name
+# Search By Name
 # ============================================================
 
 def search_donor_by_name():
 
-    name = input("Enter donor name: ").strip()
+    name = input(
+        "Enter donor name: "
+    ).strip()
 
     if not name:
 
@@ -330,30 +462,98 @@ def search_donor_by_name():
 
     if result.get("success"):
 
-        display_donor(result["data"])
+        display_donor(
+            result["data"]
+        )
+
         return
 
     if result.get("data"):
 
         print("\nMultiple donors found:")
 
-        for donor in result["data"]:
+        display_donors(
+            result["data"]
+        )
 
-            print(
-                f"ID: {donor['donor_id']} | "
-                f"Name: {donor['full_name']} | "
-                f"Blood: {donor['blood_type']} | "
-                f"District: {donor['district']}"
-            )
+        return
 
-    else:
+    error(
+        result.get(
+            "message",
+            "Donor not found."
+        )
+    )
+
+
+# ============================================================
+# Search By Blood Type
+# ============================================================
+
+def search_donor_by_blood_type():
+
+    blood_type = input(
+        "Enter blood type: "
+    ).strip().upper()
+
+    if not blood_type:
+
+        error("Blood type cannot be empty.")
+        return
+
+    result = search_by_blood_type(
+        blood_type
+    )
+
+    if not result.get("success"):
 
         error(
             result.get(
                 "message",
-                "Donor not found."
+                "Search failed."
             )
         )
+
+        return
+
+    display_donors(
+        result.get("data", [])
+    )
+
+
+# ============================================================
+# Search By District
+# ============================================================
+
+def search_donor_by_district():
+
+    district = input(
+        "Enter district: "
+    ).strip()
+
+    if not district:
+
+        error("District cannot be empty.")
+        return
+
+    result = search_by_district(
+        district
+    )
+
+    if not result.get("success"):
+
+        error(
+            result.get(
+                "message",
+                "Search failed."
+            )
+        )
+
+        return
+
+    display_donors(
+        result.get("data", [])
+    )
 
 
 # ============================================================
@@ -364,14 +564,18 @@ def record_donation_menu():
 
     header("RECORD DONATION")
 
-    donor_id = input("Donor ID: ").strip()
+    donor_id = input(
+        "Donor ID: "
+    ).strip()
 
     if not donor_id.isdigit():
 
         error("Donor ID must be a number.")
         return
 
-    location_id = input("Location ID: ").strip()
+    location_id = input(
+        "Location ID: "
+    ).strip()
 
     if not location_id.isdigit():
 
@@ -393,7 +597,10 @@ def record_donation_menu():
 
         except ValueError:
 
-            error("Invalid date. Use YYYY-MM-DD.")
+            error(
+                "Invalid date. Use YYYY-MM-DD."
+            )
+
             return
 
     else:
@@ -438,7 +645,9 @@ def donation_history_menu():
 
     header("DONATION HISTORY")
 
-    donor_id = input("Donor ID: ").strip()
+    donor_id = input(
+        "Donor ID: "
+    ).strip()
 
     if not donor_id.isdigit():
 
@@ -454,13 +663,16 @@ def donation_history_menu():
         error(
             result.get(
                 "message",
-                "Could not retrieve donation history."
+                "Could not retrieve history."
             )
         )
 
         return
 
-    history = result.get("data", [])
+    history = result.get(
+        "data",
+        []
+    )
 
     if not history:
 
@@ -514,6 +726,11 @@ def reports_menu():
         error("Unable to generate report.")
         return
 
+    if not report.get("total_donors"):
+
+        error("Unable to generate report.")
+        return
+
     if not report["total_donors"].get("success"):
 
         error("Unable to generate report.")
@@ -561,40 +778,25 @@ def reports_menu():
 
 
 # ============================================================
-# Staff/User Menu
+# Staff / User Menu
 # ============================================================
 
 def staff_menu():
 
     while True:
 
-        header("STAFF/USER MENU")
+        header("STAFF / USER MENU")
 
         print("1. Search Donor")
-        print("2. Check Eligibility")
-        print("3. View Available Blood")
-        print("0. Exit")
+        print("0. Back")
 
-        choice = input("\nChoose option: ").strip()
+        choice = input(
+            "\nChoose option: "
+        ).strip()
 
         if choice == "1":
 
             search_donor_menu()
-            pause()
-
-        elif choice == "2":
-
-            print(
-                "\nEligibility checker will be connected here."
-            )
-            pause()
-
-        elif choice == "3":
-
-            print(
-                "\nBlood availability will be connected here."
-            )
-            pause()
 
         elif choice == "0":
 
@@ -614,13 +816,17 @@ def main_menu():
 
     while True:
 
-        header("LIFELINK BLOOD DONATION SYSTEM")
+        header(
+            "LIFELINK BLOOD DONATION SYSTEM"
+        )
 
         print("1. Administrator Login")
-        print("2. Staff/User")
+        print("2. Staff / User")
         print("0. Exit")
 
-        choice = input("\nChoose option: ").strip()
+        choice = input(
+            "\nChoose option: "
+        ).strip()
 
         if choice == "1":
 
@@ -632,7 +838,10 @@ def main_menu():
 
         elif choice == "0":
 
-            print("\nThank you for using LifeLink.")
+            print(
+                "\nThank you for using LifeLink."
+            )
+
             print("Goodbye!")
 
             break
