@@ -1,73 +1,105 @@
 """
-Eligibility checking module.
+Eligibility Checker
+LifeLink Blood Donation Management System
 
 Determines whether a donor is eligible
-to donate blood.
+to donate blood based on the 56-day rule.
 """
 
-
 from datetime import date, datetime
-# Minimum of days one spend before the next donation
 
+# Minimum waiting period between donations
 ELIGIBILITY_DAYS = 56
-
-
-def is_eligible(last_donation_date):
-    """
-    Determine whether a donor is eligible.
-
-    A donor is eligible if at least
-    56 days have passed since their
-    last donation.
-
-    Args:
-        last_donation_date (date): Date of the previous donation.
-
-    Returns:
-        bool: True if eligible, False otherwise.
-    """
-    return days_until_eligible(last_donation_date) == 0
 
 
 def days_until_eligible(last_donation_date):
     """
-    Calculate the remaining days until
-    the donor becomes eligible again.
+    Returns the number of days remaining
+    before the donor can donate again.
 
-    Args:
-        last_donation_date (date): Date of previous donation.
-
-    Returns:
-        int: Number of remaining days.
+    Accepts either:
+        - datetime.date
+        - "YYYY-MM-DD" string
+        - None
     """
-    last_donation_date = last_donation_date.strip()
-    # We will first validate the input. ino our case is the last_donation_date
-    if isinstance(last_donation_date, str):
 
-        if not last_donation_date.strip():
-            raise ValueError("Date cannot be empty.")
+    # Never donated before
+    if last_donation_date is None:
+        return 0
+
+    # Convert string to date
+    if isinstance(last_donation_date, str):
 
         try:
             last_donation_date = datetime.strptime(
                 last_donation_date,
-                "%d/%m/%Y"
+                "%Y-%m-%d"
             ).date()
-        except ValueError as error:
-            raise ValueError(str(error)) from error
 
-    if last_donation_date is None:
-        raise TypeError("Last donation date is not provided!")
+        except ValueError:
+
+            raise ValueError(
+                "Date must be in YYYY-MM-DD format."
+            )
+
     if not isinstance(last_donation_date, date):
+
         raise TypeError(
-    "Date must be a date object or DD/MM/YYYY format."
-)
+            "last_donation_date must be a date object."
+        )
+
     today = date.today()
+
     if last_donation_date > today:
-        raise ValueError("Date cannot be in the future.")
-    # we calculate the days passed since the last donation
+
+        raise ValueError(
+            "Donation date cannot be in the future."
+        )
+
     days_passed = (today - last_donation_date).days
-    # we calculate the remaining days
-    remaining_days = ELIGIBILITY_DAYS - days_passed
-    return max(0, remaining_days)
+
+    remaining = ELIGIBILITY_DAYS - days_passed
+
+    return max(0, remaining)
 
 
+def is_eligible(last_donation_date):
+    """
+    Returns True if donor may donate today.
+    """
+
+    return days_until_eligible(last_donation_date) == 0
+
+
+def eligibility_message(last_donation_date):
+    """
+    Human-readable eligibility result.
+    """
+
+    remaining = days_until_eligible(last_donation_date)
+
+    if remaining == 0:
+
+        return "Eligible to donate."
+
+    return (
+        f"Not eligible. "
+        f"Wait {remaining} more day(s)."
+    )
+
+
+# ------------------------------------------
+# Testing
+# ------------------------------------------
+
+if __name__ == "__main__":
+
+    print(is_eligible(None))
+
+    print(eligibility_message(None))
+
+    print(
+        eligibility_message(
+            "2026-05-01"
+        )
+    )

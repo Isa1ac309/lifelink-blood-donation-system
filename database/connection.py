@@ -17,3 +17,18 @@ def get_db_connection():
 # use .env to use your own variables
 #.env must be in the root of the repo
 # .env must be included in .gitignore
+
+
+# ==================================================
+# Connection Test
+# ==================================================
+
+if __name__ == "__main__":
+
+    conn = get_db_connection()
+
+    if conn:
+        print("✅ Connected successfully to LifeLink database.")
+        conn.close()
+    else:
+        print("❌ Failed to connect.")
